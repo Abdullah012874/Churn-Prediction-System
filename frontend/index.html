@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Churn AI Prediction</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Background Elements -->
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-grid"></div>
+
+    <!-- Navigation -->
+    <nav class="glass-nav">
+        <div class="logo">
+            <i class="fa-solid fa-brain logo-icon"></i>
+            <span class="logo-text">ChurnAI</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="#" onclick="showPage('landing', event)" class="active"><i class="fa-solid fa-house"></i> Home</a></li>
+            <li><a href="#" onclick="showPage('predict', event)"><i class="fa-solid fa-wand-magic-sparkles"></i> Predict</a></li>
+            <li><a href="#" onclick="showPage('dashboard', event)"><i class="fa-solid fa-chart-line"></i> Dashboard</a></li>
+        </ul>
+        <!-- Mobile Menu Toggle -->
+        <button class="mobile-toggle" onclick="toggleMobileMenu()"><i class="fa-solid fa-bars"></i></button>
+    </nav>
+
+    <main id="app">
+        <!-- Landing Page -->
+        <section id="landing" class="page active">
+            <div class="hero">
+                <div class="hero-content">
+                    <div class="badge-pill">
+                        <span class="pulse-dot"></span> Powered by ML
+                    </div>
+                    <h1>Predict Customer Churn with <span>AI Precision</span></h1>
+                    <p>Identify at-risk customers before they leave. Gain deep analytics, visualize spending patterns, and receive smart retention strategies instantly.</p>
+                    <div class="hero-actions">
+                        <button class="btn-primary" onclick="showPage('predict')">Start Prediction <i class="fa-solid fa-arrow-right"></i></button>
+                        <button class="btn-secondary" onclick="showPage('dashboard')">View Analytics</button>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="stat-box">
+                            <h3><i class="fa-solid fa-bullseye"></i> 89.6%</h3>
+                            <p>Model Accuracy</p>
+                        </div>
+                        <div class="stat-box">
+                            <h3><i class="fa-solid fa-bolt"></i> 10+</h3>
+                            <p>Features Analyzed</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="floating-card glass-card">
+                        <div class="fc-header">
+                            <i class="fa-solid fa-user-shield"></i> Customer Risk Analysis
+                        </div>
+                        <div class="fc-body">
+                            <div class="fc-bar w-80 red"></div>
+                            <div class="fc-bar w-40 yellow"></div>
+                            <div class="fc-bar w-90 green"></div>
+                        </div>
+                        <div class="fc-footer">
+                            <div class="fc-avatar"></div>
+                            <div class="fc-info">
+                                <div class="fc-line"></div>
+                                <div class="fc-line short"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="floating-card glass-card secondary-float">
+                        <i class="fa-solid fa-chart-pie chart-icon"></i>
+                        <p>Real-time Analytics</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prediction Form Page -->
+        <section id="predict" class="page">
+            <div class="form-wrapper">
+                <div class="form-header">
+                    <h2><i class="fa-solid fa-user-pen"></i> Customer Data Analysis</h2>
+                    <p>Enter the customer's metrics below to generate an AI-powered churn prediction.</p>
+                </div>
+                
+                <form id="predictionForm" class="glass-card" onsubmit="handlePredict(event)">
+                    
+                    <div class="form-section-title"><i class="fa-solid fa-id-card"></i> Demographics</div>
+                    <div class="form-grid">
+                        <div class="input-container">
+                            <i class="fa-solid fa-user input-icon"></i>
+                            <input type="number" id="age" name="age" required min="18" max="100" placeholder=" ">
+                            <label for="age">Age</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-venus-mars input-icon"></i>
+                            <select id="gender" name="gender" required>
+                                <option value="" disabled selected></option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                            </select>
+                            <label for="gender">Gender</label>
+                        </div>
+                    </div>
+
+                    <div class="form-section-title"><i class="fa-solid fa-briefcase"></i> Account Details</div>
+                    <div class="form-grid">
+                        <div class="input-container">
+                            <i class="fa-solid fa-calendar-days input-icon"></i>
+                            <input type="number" id="tenure" name="tenure" required min="0" placeholder=" ">
+                            <label for="tenure">Tenure (Months)</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-crown input-icon"></i>
+                            <select id="subscription_type" name="subscription_type" required>
+                                <option value="" disabled selected></option>
+                                <option value="Basic">Basic</option>
+                                <option value="Standard">Standard</option>
+                                <option value="Premium">Premium</option>
+                            </select>
+                            <label for="subscription_type">Subscription Tier</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-file-signature input-icon"></i>
+                            <select id="contract_length" name="contract_length" required>
+                                <option value="" disabled selected></option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Quarterly">Quarterly</option>
+                                <option value="Annual">Annual</option>
+                            </select>
+                            <label for="contract_length">Contract Length</label>
+                        </div>
+                    </div>
+
+                    <div class="form-section-title"><i class="fa-solid fa-chart-bar"></i> Usage & Finance</div>
+                    <div class="form-grid">
+                        <div class="input-container">
+                            <i class="fa-solid fa-mobile-screen input-icon"></i>
+                            <input type="number" id="usage_frequency" name="usage_frequency" required min="0" max="31" placeholder=" ">
+                            <label for="usage_frequency">Usage Freq (Days/Month)</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-headset input-icon"></i>
+                            <input type="number" id="support_calls" name="support_calls" required min="0" placeholder=" ">
+                            <label for="support_calls">Support Calls</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-clock-rotate-left input-icon"></i>
+                            <input type="number" id="payment_delay" name="payment_delay" required min="0" placeholder=" ">
+                            <label for="payment_delay">Payment Delay (Days)</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-sack-dollar input-icon"></i>
+                            <input type="number" id="total_spend" name="total_spend" required min="0" step="0.01" placeholder=" ">
+                            <label for="total_spend">Total Spend ($)</label>
+                        </div>
+                        <div class="input-container">
+                            <i class="fa-solid fa-handshake input-icon"></i>
+                            <input type="number" id="last_interaction" name="last_interaction" required min="0" placeholder=" ">
+                            <label for="last_interaction">Last Interaction (Days Ago)</label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary submit-btn" id="predictBtn">
+                        <span class="btn-text">Generate Prediction <i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                        <div class="loader hidden" id="predictSpinner"></div>
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- Result Page -->
+        <section id="result" class="page">
+            <div class="result-wrapper">
+                <button class="btn-back" onclick="showPage('predict')"><i class="fa-solid fa-arrow-left"></i> Back to Form</button>
+                
+                <div class="result-top-section">
+                    <div class="glass-card result-card">
+                        <div class="result-badge" id="riskBadge">High Risk</div>
+                        <h2 id="resultTitle">Likely to Churn</h2>
+                        <p class="result-subtitle">AI Model Confidence</p>
+                        
+                        <div class="circular-progress" id="probCircle">
+                            <div class="progress-value">
+                                <span id="probText">0%</span>
+                            </div>
+                        </div>
+                        <div class="trend-indicator" id="trendIndicator">
+                            <i class="fa-solid fa-arrow-trend-down"></i> Immediate action required
+                        </div>
+                    </div>
+                </div>
+
+                <div class="suggestions-wrapper">
+                    <h3><i class="fa-solid fa-lightbulb"></i> Smart Retention Strategies</h3>
+                    <div class="suggestions-grid" id="suggestionsList">
+                        <!-- Suggestion Cards injected here -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Dashboard Page -->
+        <section id="dashboard" class="page">
+            <div class="dashboard-header">
+                <div>
+                    <h2><i class="fa-solid fa-chart-line"></i> Analytics Dashboard</h2>
+                    <p>Real-time insights from your prediction history</p>
+                </div>
+                <button class="btn-primary" onclick="loadDashboard()"><i class="fa-solid fa-rotate-right"></i> Sync Data</button>
+            </div>
+            
+            <!-- Summary Cards -->
+            <div class="summary-grid">
+                <div class="glass-card summary-card">
+                    <div class="sc-icon blue"><i class="fa-solid fa-users"></i></div>
+                    <div class="sc-info">
+                        <h4>Total Predictions</h4>
+                        <h2 id="totalPreds">0</h2>
+                    </div>
+                </div>
+                <div class="glass-card summary-card">
+                    <div class="sc-icon red"><i class="fa-solid fa-user-minus"></i></div>
+                    <div class="sc-info">
+                        <h4>High-Risk Customers</h4>
+                        <h2 id="highRiskPreds">0</h2>
+                    </div>
+                </div>
+                <div class="glass-card summary-card">
+                    <div class="sc-icon green"><i class="fa-solid fa-user-check"></i></div>
+                    <div class="sc-info">
+                        <h4>Low-Risk Customers</h4>
+                        <h2 id="lowRiskPreds">0</h2>
+                    </div>
+                </div>
+                <div class="glass-card summary-card">
+                    <div class="sc-icon purple"><i class="fa-solid fa-sack-dollar"></i></div>
+                    <div class="sc-info">
+                        <h4>Avg Customer Spend</h4>
+                        <h2 id="avgSpend">$0</h2>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Charts Grid -->
+            <div class="charts-grid">
+                <div class="glass-card chart-container">
+                    <h3><i class="fa-solid fa-chart-pie"></i> Churn Distribution</h3>
+                    <div class="canvas-wrapper"><canvas id="churnPieChart"></canvas></div>
+                </div>
+                <div class="glass-card chart-container">
+                    <h3><i class="fa-solid fa-chart-column"></i> Risk Levels</h3>
+                    <div class="canvas-wrapper"><canvas id="riskBarChart"></canvas></div>
+                </div>
+                <div class="glass-card chart-container">
+                    <h3><i class="fa-solid fa-crown"></i> Subscription Tiers</h3>
+                    <div class="canvas-wrapper"><canvas id="subChart"></canvas></div>
+                </div>
+                <div class="glass-card chart-container">
+                    <h3><i class="fa-solid fa-arrow-trend-up"></i> Prediction Trends (Last 7 Days)</h3>
+                    <div class="canvas-wrapper"><canvas id="trendChart"></canvas></div>
+                </div>
+            </div>
+            
+            <!-- History Table -->
+            <div class="glass-card history-section">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> Recent Activity Log</h3>
+                <div class="table-responsive">
+                    <table id="historyTable">
+                        <thead>
+                            <tr>
+                                <th>Date & Time</th>
+                                <th>Profile</th>
+                                <th>Spend / Tier</th>
+                                <th>Prediction</th>
+                                <th>Risk Level</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-circle-check toast-icon"></i>
+        <span id="toastMsg">Success</span>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>
