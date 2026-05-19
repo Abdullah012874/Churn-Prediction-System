@@ -1,97 +1,117 @@
 import os
-import sqlite3
 import pandas as pd
+import numpy as np
 # pyrefly: ignore [missing-import]
-from flask import Flask, request, jsonify # type: ignore
+from flask import Flask, request, jsonify, send_file # type: ignore
 from flask_cors import CORS # type: ignore
 import joblib
 
 from utils.suggestions import generate_suggestions
+from utils.model_comparison import get_model_metrics
+from database.mongo import MongoDBHandler
+from reports.report_generator import generate_pdf_report
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS", "DELETE", "PUT"]}})
 
-# Load Model and Preprocessor
+# Directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, 'model.pkl')
-PREPROCESSOR_PATH = os.path.join(BASE_DIR, 'preprocessor.pkl')
-DB_PATH = os.path.join(BASE_DIR, 'database.db')
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
-model = None
-preprocessor = None
+# Shared preprocessors (loaded once at startup)
+scaler = None
+encoder = None
+db_handler = MongoDBHandler()
+
+# Supported classifiers map: display name → .pkl filename
+SUPPORTED_MODELS = {
+    "Logistic Regression": "logistic_model.pkl",
+    "KNN":                 "knn_model.pkl",
+    "Naive Bayes":         "naive_bayes.pkl",
+    "SVM":                 "svm_model.pkl"
+}
 
 try:
-    model = joblib.load(MODEL_PATH)
-    preprocessor = joblib.load(PREPROCESSOR_PATH)
-    print("Model and Preprocessor loaded successfully.")
+    scaler  = joblib.load(os.path.join(MODELS_DIR, 'scaler.pkl'))
+    encoder = joblib.load(os.path.join(MODELS_DIR, 'encoder.pkl'))
+    print("Scaler and Encoder loaded successfully.")
 except Exception as e:
-    print(f"Error loading model/preprocessor: {e}")
+    print(f"Error loading preprocessors: {e}. Train the models first!")
 
-# Database Initialization
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS predictions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            age INTEGER,
-            gender TEXT,
-            tenure INTEGER,
-            usage_frequency INTEGER,
-            support_calls INTEGER,
-            payment_delay INTEGER,
-            subscription_type TEXT,
-            contract_length TEXT,
-            total_spend REAL,
-            last_interaction INTEGER,
-            prediction TEXT,
-            probability REAL,
-            risk_level TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+
+def load_selected_model(selected_model: str):
+    """
+    Load and return the joblib model corresponding to the user-selected
+    classifier name. Raises ValueError for unknown names.
+    """
+    if selected_model not in SUPPORTED_MODELS:
+        raise ValueError(
+            f"Unknown model '{selected_model}'. "
+            f"Supported: {list(SUPPORTED_MODELS.keys())}"
         )
-    ''')
-    conn.commit()
-    conn.close()
+    model_file = SUPPORTED_MODELS[selected_model]
+    model_path = os.path.join(MODELS_DIR, model_file)
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Model file '{model_file}' not found in models directory. "
+            "Please retrain the models."
+        )
+    return joblib.load(model_path)
 
-init_db()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Routes
+# ─────────────────────────────────────────────────────────────────────────────
 
 @app.route('/', methods=['GET'])
 def health_check():
-    return jsonify({"message": "Customer Churn Prediction API Running"})
+    return jsonify({"message": "Customer Churn Prediction API Running with MongoDB"})
+
+
+@app.route('/available-models', methods=['GET'])
+def available_models():
+    """Return the list of supported classifier names for the frontend selector."""
+    return jsonify({"models": list(SUPPORTED_MODELS.keys())})
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
         data = request.json
-        
-        # Extract features
-        features = {
-            'Age': [int(data.get('age', 0))],
-            'Gender': [data.get('gender', '')],
-            'Tenure': [int(data.get('tenure', 0))],
-            'Usage Frequency': [int(data.get('usage_frequency', 0))],
-            'Support Calls': [int(data.get('support_calls', 0))],
-            'Payment Delay': [int(data.get('payment_delay', 0))],
+
+        # ── Validate selected_model ──────────────────────────────────────────
+        selected_model = data.get('selected_model', '').strip()
+        if not selected_model:
+            return jsonify({"error": "Please select a prediction model before submitting."}), 400
+        if selected_model not in SUPPORTED_MODELS:
+            return jsonify({"error": f"Invalid model '{selected_model}'. Choose from: {list(SUPPORTED_MODELS.keys())}"}), 400
+
+        # ── Load the user-selected model ─────────────────────────────────────
+        model = load_selected_model(selected_model)
+
+        # ── Build feature dataframe ──────────────────────────────────────────
+        features_dict = {
+            'Age':               [int(data.get('age', 0))],
+            'Gender':            [data.get('gender', '')],
+            'Tenure':            [int(data.get('tenure', 0))],
+            'Usage Frequency':   [int(data.get('usage_frequency', 0))],
+            'Support Calls':     [int(data.get('support_calls', 0))],
+            'Payment Delay':     [int(data.get('payment_delay', 0))],
             'Subscription Type': [data.get('subscription_type', '')],
-            'Contract Length': [data.get('contract_length', '')],
-            'Total Spend': [float(data.get('total_spend', 0))],
-            'Last Interaction': [int(data.get('last_interaction', 0))]
+            'Contract Length':   [data.get('contract_length', '')],
+            'Total Spend':       [float(data.get('total_spend', 0))],
+            'Last Interaction':  [int(data.get('last_interaction', 0))]
         }
 
-        # Convert to DataFrame
-        df = pd.DataFrame(features)
+        df = pd.DataFrame(features_dict)
 
-        # Preprocess
-        X_processed = preprocessor.transform(df)
+        from utils.predictor import predict_churn
+        pred_class, prob = predict_churn(model, scaler, encoder, df)
 
-        # Predict
-        prob = model.predict_proba(X_processed)[0][1] # Probability of Class 1 (Churn)
-        pred_class = model.predict(X_processed)[0]
+        prediction_text = "Likely to Churn" if int(pred_class) == 1 else "Likely to Stay"
+        probability = round(float(prob), 4)
 
-        prediction_text = "Likely to Churn" if pred_class == 1 else "Likely to Stay"
-        probability = round(prob, 4)
-
-        # Determine Risk Level
         if probability >= 0.7:
             risk_level = "High"
         elif probability >= 0.4:
@@ -99,63 +119,135 @@ def predict():
         else:
             risk_level = "Low"
 
-        # Generate Suggestions
-        suggestions = generate_suggestions(data, risk_level)
+        # Strip selected_model from customer_data before storing
+        customer_data = {k: v for k, v in data.items() if k != 'selected_model'}
+        suggestions = generate_suggestions(customer_data, risk_level)
 
-        # Save to DB
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO predictions (
-                age, gender, tenure, usage_frequency, support_calls, payment_delay,
-                subscription_type, contract_length, total_spend, last_interaction,
-                prediction, probability, risk_level
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data.get('age'), data.get('gender'), data.get('tenure'), data.get('usage_frequency'),
-            data.get('support_calls'), data.get('payment_delay'), data.get('subscription_type'),
-            data.get('contract_length'), data.get('total_spend'), data.get('last_interaction'),
-            prediction_text, probability, risk_level
-        ))
-        conn.commit()
-        conn.close()
+        # ── Persist to MongoDB ───────────────────────────────────────────────
+        db_doc = {
+            "selected_model": selected_model,
+            "customer_data":  customer_data,
+            "prediction":     prediction_text,
+            "probability":    probability,
+            "risk_level":     risk_level,
+            "suggestions":    suggestions,
+            "timestamp":      datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        db_handler.insert_prediction(db_doc)
 
         return jsonify({
-            "prediction": prediction_text,
-            "probability": probability,
-            "risk_level": risk_level,
-            "suggestions": suggestions
+            "prediction":     prediction_text,
+            "probability":    probability,
+            "risk_level":     risk_level,
+            "selected_model": selected_model,
+            "suggestions":    suggestions
         })
 
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
+@app.route('/model-comparison', methods=['GET'])
+def model_comparison():
+    try:
+        metrics = get_model_metrics()
+        if "error" in metrics:
+            return jsonify(metrics), 400
+        return jsonify(metrics)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/history', methods=['GET'])
 def get_history():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        c = conn.cursor()
-        c.execute('SELECT * FROM predictions ORDER BY timestamp DESC')
-        rows = c.fetchall()
-        conn.close()
+        model_filter = request.args.get('model', '').strip()
+        history = db_handler.get_all_predictions(model_filter=model_filter if model_filter else None)
 
-        history = [dict(ix) for ix in rows]
-        return jsonify(history)
+        flattened_history = []
+        for doc in history:
+            flat_doc = {
+                "id":             doc['_id'],
+                "prediction":     doc.get('prediction'),
+                "probability":    doc.get('probability'),
+                "risk_level":     doc.get('risk_level'),
+                "timestamp":      doc.get('timestamp'),
+                "selected_model": doc.get('selected_model') or doc.get('used_model', 'Unknown')
+            }
+            # Merge customer fields to the top level for the frontend
+            cust = doc.get('customer_data', {})
+            flat_doc.update(cust)
+            flattened_history.append(flat_doc)
+
+        return jsonify(flattened_history)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/history/<int:id>', methods=['DELETE'])
+
+@app.route('/api/history/<id>', methods=['DELETE'])
 def delete_history(id):
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('DELETE FROM predictions WHERE id = ?', (id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Deleted successfully"})
+        success = db_handler.delete_prediction(id)
+        if success:
+            return jsonify({"message": "Deleted successfully"})
+        return jsonify({"error": "Failed to delete"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/history/clear', methods=['DELETE'])
+def clear_history():
+    try:
+        count = db_handler.clear_all_predictions()
+        return jsonify({"message": f"Cleared {count} records successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/generate-report', methods=['GET'])
+def generate_report():
+    try:
+        history = db_handler.get_all_predictions()
+        pdf_bytes = generate_pdf_report(history)
+
+        temp_pdf_path = os.path.join(BASE_DIR, 'reports', 'churn_report.pdf')
+        os.makedirs(os.path.dirname(temp_pdf_path), exist_ok=True)
+        with open(temp_pdf_path, 'wb') as f:
+            f.write(pdf_bytes)
+
+        return send_file(
+            temp_pdf_path,
+            as_attachment=True,
+            download_name='Churn_Prediction_Report.pdf',
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/generate-report/<id>', methods=['GET'])
+def generate_specific_report(id):
+    try:
+        doc = db_handler.get_prediction_by_id(id)
+        if not doc:
+            return jsonify({"error": "Prediction not found"}), 404
+        
+        pdf_bytes = generate_pdf_report([doc])
+
+        temp_pdf_path = os.path.join(BASE_DIR, 'reports', f'churn_report_{id}.pdf')
+        os.makedirs(os.path.dirname(temp_pdf_path), exist_ok=True)
+        with open(temp_pdf_path, 'wb') as f:
+            f.write(pdf_bytes)
+
+        return send_file(
+            temp_pdf_path,
+            as_attachment=True,
+            download_name=f'Churn_Prediction_Report_{id}.pdf',
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
